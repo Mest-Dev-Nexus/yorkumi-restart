@@ -23,8 +23,9 @@ export const addCategory = async (req, res, next) => {
 
 export const getCategories = async (req, res, next) =>{
  try {
-  const result = await CategoryModel.find();
-  return res.json(result);
+  const {filter = '{}',sort = '{}'} = req.query;
+      const result = await CategoryModel.find(JSON.parse(filter)).sort(JSON.parse(sort))
+      return res.status(200).json(result);
  } catch (error) {
   next(error)
  }
@@ -44,6 +45,21 @@ export const patchCategory = async (req, res, next) =>{
    return res.json({
     message: "Category updated successfully",
     data: result
+  });
+  } catch (error) {
+   next(error)
+  }
+ }
+export const deleteCategory = async (req, res, next) =>{
+  try {
+   const result = await CategoryModel.findByIdAndDelete(req.params.id);
+   if (!result){
+    return res.status(404).json({
+      message:"Category not found"
+    })
+   }
+   return res.json({
+    message: "Category deleted successfully"
   });
   } catch (error) {
    next(error)
