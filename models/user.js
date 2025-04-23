@@ -1,4 +1,5 @@
 import mongoose from "mongoose";
+import normalizeMongoose from 'normalize-mongoose';
 
 const userSchema = new mongoose.Schema({
   email: { type: String, required: true, unique: true },
@@ -11,6 +12,8 @@ const userSchema = new mongoose.Schema({
     enum: ['user'], 
     default: 'user' },
 
-})
+},{timestamps:true})
+
+userSchema.plugin(normalizeMongoose);
 
 export const UserModel = mongoose.model("user", userSchema)

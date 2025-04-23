@@ -164,3 +164,30 @@ export const deleteProduct = async (req, res, next) => {
      next(error)
     }
 }
+
+export const productCount = async (req, res, next) => {
+  try {
+    const result = await ProductModel.countDocuments();
+
+    if (result === 0) {
+      return res.status(404).json({ message: "There are no products to count" });
+    }
+
+    res.status(200).json({ count: result });
+  } catch (error) {
+    next(error);
+  }
+};
+export const featuredProduct = async (req, res, next) => {
+  try {
+    const result = await ProductModel.find({isFeatured:true}).limit(5);
+
+    if (result === 0) {
+      return res.status(404).json({ message: "There are no products to feature" });
+    }
+
+    res.status(200).json({ count: result });
+  } catch (error) {
+    next(error);
+  }
+};

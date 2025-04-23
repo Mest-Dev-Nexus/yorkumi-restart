@@ -6,6 +6,8 @@ import {
   updateProduct,
   deleteProduct,
   getProductMinDeets,
+  productCount,
+  featuredProduct,
 } from "../controllers/product.js";
 import { productsPicturesUpload } from "../middlewares/upload.js";
 import { isAuthenticated,isUserAuthorized,isVendorAuthorized } from '../middlewares/auth.js';
@@ -24,8 +26,15 @@ productRouter.get("/product", getProducts);
 // get products name and images alone
 productRouter.get('/product/min', getProductMinDeets)
 
+// get product count 
+productRouter.get('/product/count', productCount)
+
+// get featured product
+productRouter.get('/product/featured', featuredProduct)
+
 // Get single product by ID
 productRouter.get("/product/:id", getProductById);
+
 
 // Update product by ID
 productRouter.patch("/product/:id",productsPicturesUpload.fields([
