@@ -1,10 +1,7 @@
 import Joi from 'joi';
 
 export const orderValidationSchema = Joi.object({
-  cart: Joi.string().required()
-    .messages({
-      'any.required': 'Cart ID is required',
-    }),
+  
   shippingAddress1: Joi.string().required(),
   shippingAddress2: Joi.string().optional().allow('', null),
   city: Joi.string().required(),

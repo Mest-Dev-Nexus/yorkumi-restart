@@ -3,11 +3,7 @@ import normalizeMongoose from 'normalize-mongoose';
 
 const orderSchema = new mongoose.Schema(
   {
-    cart: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'Cart',
-      required: true,
-    },
+   
     shippingAddress1: {
       type: String,
       required: true,

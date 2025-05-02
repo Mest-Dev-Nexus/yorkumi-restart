@@ -5,10 +5,15 @@ export const cartValidationSchema = Joi.object({
   products: Joi.array().items(
     Joi.object({
       product: Joi.string()
+        .length(24)
+        .hex()
         .required()
         .messages({
           'any.required': 'Product ID is required',
+          'string.length': 'Product ID must be 24 characters',
+          'string.hex': 'Product ID must be a valid hexadecimal string',
         }),
+
       quantity: Joi.number()
         .integer()
         .min(1)
