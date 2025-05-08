@@ -6,8 +6,8 @@ import categoryRouter from "./routes/category-routes.js";
 import productRouter from "./routes/product.js";
 import vendorRouter from "./routes/vendor.js";
 import userRouter from "./routes/user.js";
-import cartRouter from "./routes/cart.js";
 import orderRouter from "./routes/order.js";
+import shippingRouter from "./routes/shipping.js";
 
 
 
@@ -24,7 +24,7 @@ app.use(categoryRouter)
 app.use(productRouter);
 app.use(vendorRouter);
 app.use(userRouter);
-app.use(cartRouter)
+app.use(shippingRouter)
 app.use(orderRouter)
 
 

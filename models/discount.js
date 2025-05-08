@@ -1,0 +1,1 @@
+// promocode, value, expiryDate, isActive, type

@@ -6,17 +6,38 @@ const userSchema = new mongoose.Schema({
   password: { type: String, required: true },
   username: { type: String, required: true },
   image: { type: String },
-  lastname: { type: String }, // Added lastname field
+  fullName: { type: String }, // Added lastname field
   whatsappnumber: { type: String }, // Fixed field name to match registration
   role: { 
     type: String, 
     enum: ['user'], 
     default: 'user' 
   },
-  cart: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'Cart'
-  }
+  address: {
+    address1: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    address2: {
+      type: String,
+      trim: true
+    },
+    city: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    country: {
+      type: String,
+      required: true,
+      trim: true
+    },
+    postalCode: {
+      type: String,
+      trim: true
+    }
+  },
 }, {timestamps: true})
 
 userSchema.plugin(normalizeMongoose);

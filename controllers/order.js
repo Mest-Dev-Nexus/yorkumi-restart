@@ -2,13 +2,14 @@ import mongoose from 'mongoose';
 import { CartModel } from '../models/cart.js';
 import { ProductModel } from '../models/product.js';
 import { OrderModel } from '../models/order.js';
+import { orderAmountCalc } from '../helpers/orderAmountCalc.js';
 
 /**
  * Controller function to create order from cart before payment
  * - Creates the order but doesn't update inventory yet
  * - Adds a paymentStatus field to track whether payment is completed
  */
-export const createOrderFromCart = async (req, res, next) => {
+export const createOrder = async (req, res, next) => {
   try {
     const userId = req.auth?.id; // From authentication middleware
     const { 
@@ -16,21 +17,13 @@ export const createOrderFromCart = async (req, res, next) => {
       shippingAddress2, 
       city, 
       country, 
-      phoneNumber 
-    } = req.body;
-
-    // Validate shipping details
-    if (!shippingAddress1 || !city || !country || !phoneNumber) {
-      return res.status(400).json({
-        message: "Validation error",
-        error: ["Shipping details are required: shippingAddress1, city, country, and phoneNumber"]
-      });
-    }
-
-    // Find the user's cart
-    const userCart = await CartModel.findOne({ user: userId }).populate('items.product');
+    } = req.body.address;
+    const {
+      cart,promocode
+    }= req.body;
     
-    if (!userCart || !userCart.items || userCart.items.length === 0) {
+
+     if (!cart || !cart.items || cart.items.length === 0) {
       return res.status(400).json({
         message: "Cart error",
         error: ["Your cart is empty"]
@@ -38,7 +31,7 @@ export const createOrderFromCart = async (req, res, next) => {
     }
 
     // Check product availability first (without updating inventory yet)
-    for (const item of userCart.items) {
+    for (const item of cart.items) {
       const product = item.product;
       
       if (!product) {
@@ -56,46 +49,21 @@ export const createOrderFromCart = async (req, res, next) => {
       }
     }
 
-    // Convert cart items to order items and calculate total price
-    const orderItems = [];
-    let baseTotal = 0;
-    
-    for (const item of userCart.items) {
-      const product = item.product;
-      
-      // Calculate price (handles both string and number price formats)
-      const price = typeof product.price === 'string' ? parseFloat(product.price) : product.price;
-      baseTotal += price * item.quantity;
-      
-      // Add to order items
-      orderItems.push({
-        product: product._id,
-        quantity: item.quantity
-      });
-    }
-    
+    const discount = await DiscountModel.findOne({promocode});
+
+    const costing = orderAmountCalc(cart,req.body.adress,userId,discount.value);
     // Create the new order
     const newOrder = await OrderModel.create({
-      orderItems,
-      shippingAddress1,
-      shippingAddress2: shippingAddress2 || "",
-      city,
-      country,
-      phoneNumber,
-      totalPrice: baseTotal, // Shipping fee will be added by pre-save hook
+      address,
+      cart,
+      costing, // This should be the result of orderAmountCalc
       user: userId,
-      // We'll use the existing status field as 'pending' by default
-      // You might want to add a paymentStatus field to the schema if needed
+      
     });
     
     return res.status(201).json({
       message: "Order created successfully. Please proceed to payment.",
-      data: {
-        orderId: newOrder._id,
-        totalPrice: newOrder.totalPrice,
-        shippingFee: newOrder.shippingFee,
-        totalWithShipping: newOrder.totalPrice + newOrder.shippingFee
-      }
+      data: newOrder
     });
   } catch (error) {
     console.error("Error creating order from cart:", error);
@@ -122,7 +90,7 @@ export const completeOrderAfterPayment = async (req, res, next) => {
       });
     }
     
-    // Find the order and verify it belongs to the user
+    // Fetch the order and populate product details
     const order = await OrderModel.findById(orderId).populate('orderItems.product');
     
     if (!order) {
@@ -138,7 +106,7 @@ export const completeOrderAfterPayment = async (req, res, next) => {
     }
     
     // Verify the order hasn't been paid for yet
-    if (order.status !== 'pending') {
+    if (order.status !== 'not paid') {
       return res.status(400).json({
         message: "This order has already been processed"
       });
@@ -172,12 +140,7 @@ export const completeOrderAfterPayment = async (req, res, next) => {
         { session }
       );
       
-      // Empty the user's cart
-      await CartModel.findOneAndUpdate(
-        { user: userId },
-        { $set: { items: [] } },
-        { session }
-      );
+     
       
       await session.commitTransaction();
       session.endSession();
