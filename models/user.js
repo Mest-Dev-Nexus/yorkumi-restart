@@ -33,6 +33,11 @@ const userSchema = new mongoose.Schema({
       required: true,
       trim: true
     },
+    region: {
+      type: String,
+      required: true,
+      trim: true
+    },
     postalCode: {
       type: String,
       trim: true

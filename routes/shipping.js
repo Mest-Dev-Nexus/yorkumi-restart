@@ -11,7 +11,7 @@ shippingRouter.get('/shipping', isAuthenticated, getShipping);
 
 
 
-shippingRouter.post('/shipping', isAuthenticated, addShipping);
+shippingRouter.post('/shipping',  addShipping);
 
 
 shippingRouter.patch('/shipping', isAuthenticated, patchShipping);

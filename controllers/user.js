@@ -79,6 +79,31 @@ export const registerUser = async (req, res, next) => {
   }
 };
 
+
+export const resetPassword = async (req, res) => {
+  try {
+    const { token } = req.params;
+    const { newPassword } = req.body;
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await UserModel.findById(decoded.id);
+    if (!user) {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+    user.password = hashedPassword;
+    await user.save();
+
+    return res.status(200).json({ message: 'Password reset successful' });
+
+  } catch (error) {
+    console.error('Reset password error:', error);
+    return res.status(400).json({ message: 'Invalid or expired token' });
+  }
+};
+
+
 export const loginUser = async (req, res, next) => {
   try {
     const {error, value} = userLoginValidationSchema.validate(req.body);

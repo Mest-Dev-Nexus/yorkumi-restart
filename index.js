@@ -8,6 +8,8 @@ import vendorRouter from "./routes/vendor.js";
 import userRouter from "./routes/user.js";
 import orderRouter from "./routes/order.js";
 import shippingRouter from "./routes/shipping.js";
+import discountRounter from "./routes/discount.js";
+import passwordRouter from "./routes/passwords.js";
 
 
 
@@ -19,13 +21,23 @@ const app = express();
 app.use(express.json());
 app.use(cors());
 
+
+app.use((req, res, next) => {
+  console.log("Request Path:", req.path);
+  next();
+});
 // app.use(productRouter);
 app.use(categoryRouter)
 app.use(productRouter);
 app.use(vendorRouter);
 app.use(userRouter);
-app.use(shippingRouter)
-app.use(orderRouter)
+app.use(passwordRouter)
+app.use(shippingRouter);
+app.use(discountRounter)
+app.use(orderRouter);
+
+
+
 
 
 
