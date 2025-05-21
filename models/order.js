@@ -38,7 +38,7 @@ const orderSchema = new Schema({
   ,
   status: {
     type: String,
-    enum: ["not paid",'pending', 'completed', 'cancelled'],
+    enum: ['not paid', 'pending', 'processing', 'shipped', 'delivered', 'cancelled'],
     default: 'not paid'
   }
 }, { timestamps: true });

@@ -1,9 +1,14 @@
+
+
+/**
+ * Controller function to create order from cart before payment
+ */
 import mongoose from 'mongoose';
-import { CartModel } from '../models/cart.js';
 import { ProductModel } from '../models/product.js';
 import { OrderModel } from '../models/order.js';
 import { DiscountModel } from '../models/discount.js';
 import { ShippingAddressModel } from '../models/shippingAddress.js';
+import { RegularUserModel } from '../models/user.js'; // Add this import
 import { orderAmountCalc } from '../helpers/orderAmountCalc.js';
 
 /**
@@ -11,10 +16,8 @@ import { orderAmountCalc } from '../helpers/orderAmountCalc.js';
  */
 export const createOrder = async (req, res, next) => {
   try {
-    // Get user ID from authenticated session
     const userId = req.auth?.id;
-    
-    // Check if userId exists - required for creating an order
+
     if (!userId) {
       return res.status(401).json({
         message: "Authentication error",
@@ -22,28 +25,48 @@ export const createOrder = async (req, res, next) => {
       });
     }
 
-    // Extract shipping address from request
-    const {
-      shippingAddress1,
-      shippingAddress2,
-      city,
-      country,
-      region
-    } = req.body.address;
-    
-    // Extract cart and promo code
     const { cart, promocode } = req.body;
     
-    // Format the address for the order
-    const address = {
-      shippingAddress1,
-      shippingAddress2,
-      city,
-      country,
-      region
-    };
+    // Initialize address
+    let address = {};
+    
+    // If address is provided in the request, use it
+    if (req.body.address) {
+      const {
+        shippingAddress1,
+        shippingAddress2,
+        city,
+        country,
+        region
+      } = req.body.address;
 
-    // Validate cart has items
+      address = {
+        shippingAddress1,
+        shippingAddress2,
+        city,
+        country,
+        region
+      };
+    } else {
+      // If no address is provided, fetch from user's saved address
+      const user = await RegularUserModel.findById(userId);
+      if (!user || !user.address || !user.address.address1) {
+        return res.status(400).json({
+          message: "Address error",
+          error: ["No shipping address provided and no default address found for user"]
+        });
+      }
+      
+      // Use the user's saved address
+      address = {
+        shippingAddress1: user.address.shippingAddress1,
+        shippingAddress2: user.address.shippingAddress2 || '',
+        city: user.address.city,
+        country: user.address.country,
+        region: user.address.region
+      };
+    }
+
     if (!cart || !cart.items || cart.items.length === 0) {
       return res.status(400).json({
         message: "Cart error",
@@ -51,26 +74,24 @@ export const createOrder = async (req, res, next) => {
       });
     }
 
-    // Check product availability and populate product data for calculations
     const populatedCartItems = [];
     for (const item of cart.items) {
       const product = await ProductModel.findById(item.product);
-      
+
       if (!product) {
         return res.status(400).json({
           message: "Product error",
           error: [`Product with ID ${item.product} was not found`]
         });
       }
-      
+
       if (product.countInStock < item.quantity) {
         return res.status(400).json({
           message: "Inventory error",
-          error: [`Not enough stock for "${product.title}". Available: ${product.countInStock}, Requested: ${item.quantity}`]
+          error: [`Not enough stock for \"${product.title}\". Available: ${product.countInStock}, Requested: ${item.quantity}`]
         });
       }
 
-      // Create a populated item with product details needed for calculation
       populatedCartItems.push({
         product: {
           _id: product._id,
@@ -81,7 +102,6 @@ export const createOrder = async (req, res, next) => {
       });
     }
 
-    // Process discount code if provided
     let discount = null;
     if (promocode) {
       discount = await DiscountModel.findOne({
@@ -89,41 +109,38 @@ export const createOrder = async (req, res, next) => {
         isActive: true,
         expiryDate: { $gt: new Date() }
       });
-      
+
       if (!discount) {
         console.log(`Promocode ${promocode} is invalid or expired`);
       }
     }
 
-    // Get shipping rate based on country and region
     let shippingId = null;
-    let shippingRate = 10; // Default fallback rate
+    let shippingRate = 10;
     try {
       const shippingData = await ShippingAddressModel.findOne({
-        country: country,
-        region: region
+        country: address.country,
+        region: address.region
       });
-      
+
       if (shippingData) {
         shippingId = shippingData._id;
         shippingRate = shippingData.rate;
-        console.log(`Using shipping rate: ${shippingRate} for ${country}, ${region}`);
+        console.log(`Using shipping rate: ${shippingRate} for ${address.country}, ${address.region}`);
       } else {
-        console.log(`No shipping rate found for ${country}, ${region}. Using default rate of ${shippingRate}.`);
+        console.log(`No shipping rate found for ${address.country}, ${address.region}. Using default rate of ${shippingRate}.`);
       }
     } catch (error) {
       console.error('Error fetching shipping rate:', error);
     }
 
-    // Calculate order amounts using populated cart items
     const calculateOrder = orderAmountCalc(populatedCartItems, shippingRate, discount);
     const costingDetails = calculateOrder();
 
-    // Create the new order with proper structure
     const newOrder = await OrderModel.create({
       address,
       cart: cart.items.map(item => ({
-        product: item.product,  // Just store the product ID reference
+        product: item.product,
         quantity: item.quantity
       })),
       costing: {
@@ -138,7 +155,7 @@ export const createOrder = async (req, res, next) => {
       user: userId,
       status: 'not paid'
     });
-    
+
     return res.status(201).json({
       message: "Order created successfully. Please proceed to payment.",
       data: newOrder
@@ -156,43 +173,30 @@ export const completeOrderAfterPayment = async (req, res, next) => {
   try {
     const { orderId } = req.params;
     const userId = req.auth?.id;
-    const { paymentDetails } = req.body; // Optional: Capture payment info
-    
-    // Validate orderId
+    const { paymentDetails } = req.body;
+
     if (!mongoose.Types.ObjectId.isValid(orderId)) {
-      return res.status(400).json({
-        message: "Invalid order ID"
-      });
+      return res.status(400).json({ message: "Invalid order ID" });
     }
-    
-    // Fetch the order and populate product details
+
     const order = await OrderModel.findById(orderId).populate('cart.product');
-    
+
     if (!order) {
-      return res.status(404).json({
-        message: "Order not found"
-      });
+      return res.status(404).json({ message: "Order not found" });
     }
-    
+
     if (order.user.toString() !== userId) {
-      return res.status(403).json({
-        message: "You don't have permission to access this order"
-      });
+      return res.status(403).json({ message: "You don't have permission to access this order" });
     }
-    
-    // Verify the order hasn't been paid for yet
+
     if (order.status !== 'not paid') {
-      return res.status(400).json({
-        message: "This order has already been processed"
-      });
+      return res.status(400).json({ message: "This order has already been processed" });
     }
-    
-    // Start a transaction for inventory updates
+
     const session = await mongoose.startSession();
     session.startTransaction();
-    
+
     try {
-      // Update product inventory
       for (const item of order.cart) {
         await ProductModel.updateOne(
           { _id: item.product },
@@ -200,29 +204,21 @@ export const completeOrderAfterPayment = async (req, res, next) => {
           { session }
         );
       }
-      
-      // Update order status
+
       await OrderModel.findByIdAndUpdate(
         orderId,
-        { 
-          $set: { 
+        {
+          $set: {
             status: 'pending',
             paymentDetails: paymentDetails || {}
-          } 
+          }
         },
         { session }
       );
-      
-      // Clear user's cart after successful order
-      await CartModel.findOneAndUpdate(
-        { user: userId },
-        { items: [] },
-        { session }
-      );
-      
+
       await session.commitTransaction();
       session.endSession();
-      
+
       return res.status(200).json({
         message: "Payment successful. Order has been confirmed.",
         orderId: order._id
@@ -240,41 +236,28 @@ export const completeOrderAfterPayment = async (req, res, next) => {
 
 /**
  * Get order by ID
- * @route GET /api/orders/:id
  */
 export const getOrderById = async (req, res, next) => {
   try {
     const { id } = req.params;
     const userId = req.auth?.id;
     const isAdmin = req.auth?.role === 'admin';
-    
-    // Validate order ID
+
     if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        message: "Invalid order ID format"
-      });
+      return res.status(400).json({ message: "Invalid order ID format" });
     }
-    
-    // Find order and populate product details
+
     const order = await OrderModel.findById(id)
-      .populate({
-        path: 'cart.product',
-        select: 'title price images' // Only get needed fields
-      });
-    
+      .populate({ path: 'cart.product', select: 'title price images' });
+
     if (!order) {
-      return res.status(404).json({
-        message: "Order not found"
-      });
+      return res.status(404).json({ message: "Order not found" });
     }
-    
-    // Check permission: must be order owner or admin
+
     if (order.user.toString() !== userId && !isAdmin) {
-      return res.status(403).json({
-        message: "You don't have permission to access this order"
-      });
+      return res.status(403).json({ message: "You don't have permission to access this order" });
     }
-    
+
     return res.status(200).json({
       message: "Order retrieved successfully",
       data: order
@@ -287,37 +270,29 @@ export const getOrderById = async (req, res, next) => {
 
 /**
  * Get all orders for logged in user
- * @route GET /api/orders
  */
 export const getUserOrders = async (req, res, next) => {
   try {
     const userId = req.auth?.id;
-    
-    // Pagination parameters
+
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 10;
     const skip = (page - 1) * limit;
-    
-    // Apply filters if provided
+
     const filterOptions = { user: userId };
-    
+
     if (req.query.status) {
       filterOptions.status = req.query.status;
     }
-    
-    // Get total count for pagination
+
     const totalOrders = await OrderModel.countDocuments(filterOptions);
-    
-    // Find orders with pagination and sorting
+
     const orders = await OrderModel.find(filterOptions)
-      .sort({ createdAt: -1 }) // Most recent first
+      .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
-      .populate({
-        path: 'cart.product',
-        select: 'title price images'
-      });
-    
+      .populate({ path: 'cart.product', select: 'title price images' });
+
     return res.status(200).json({
       message: "Orders retrieved successfully",
       data: orders,
@@ -337,58 +312,50 @@ export const getUserOrders = async (req, res, next) => {
 
 /**
  * Admin: Get all orders
- * @route GET /api/orders/admin/all
+ */
+/**
+ * Admin: Get all orders
  */
 export const getAllOrders = async (req, res, next) => {
   try {
-    // Check if user is admin
+    // Check for admin authorization
     if (req.auth?.role !== 'admin') {
-      return res.status(403).json({
-        message: "Access denied. Admin privileges required."
-      });
+      return res.status(403).json({ message: "Access denied. Admin privileges required." });
     }
-    
-    // Pagination parameters
+
+    // Set up pagination (optional)
     const page = parseInt(req.query.page) || 1;
     const limit = parseInt(req.query.limit) || 20;
     const skip = (page - 1) * limit;
-    
-    // Apply filters if provided
+
+    // Set up filter options (optional)
     const filterOptions = {};
-    
-    if (req.query.status) {
+
+    // Apply status filter if provided
+    if (req.query.status && req.query.status !== 'all') {
       filterOptions.status = req.query.status;
     }
-    
-    if (req.query.userId) {
-      filterOptions.user = req.query.userId;
-    }
-    
-    // Date range filter
+
+    // Apply date range filter if provided
     if (req.query.startDate && req.query.endDate) {
       filterOptions.createdAt = {
         $gte: new Date(req.query.startDate),
         $lte: new Date(req.query.endDate)
       };
     }
-    
-    // Get total count for pagination
+
+    // Count total orders matching the filter
     const totalOrders = await OrderModel.countDocuments(filterOptions);
-    
-    // Find orders with pagination and sorting
+
+    // Get orders with pagination
     const orders = await OrderModel.find(filterOptions)
-      .sort({ createdAt: -1 }) // Most recent first
+      .sort({ createdAt: -1 })
       .skip(skip)
       .limit(limit)
-      .populate({
-        path: 'cart.product',
-        select: 'title price images'
-      })
-      .populate({
-        path: 'user',
-        select: 'name email'
-      });
-    
+      .populate({ path: 'cart.product', select: 'title price images' })
+      .populate({ path: 'user', select: 'name email' });
+
+    // Return the orders with pagination info
     return res.status(200).json({
       message: "All orders retrieved successfully",
       data: orders,
@@ -405,24 +372,18 @@ export const getAllOrders = async (req, res, next) => {
     next(error);
   }
 };
-
 /**
  * Admin: Update order status
- * @route PUT /api/orders/:id/status
  */
 export const updateOrderStatus = async (req, res, next) => {
   try {
     const { id } = req.params;
     const { status } = req.body;
-    
-    // Check if user is admin
+
     if (req.auth?.role !== 'admin') {
-      return res.status(403).json({
-        message: "Access denied. Admin privileges required."
-      });
+      return res.status(403).json({ message: "Access denied. Admin privileges required." });
     }
-    
-    // Validate status value
+
     const validStatuses = ['not paid', 'pending', 'processing', 'shipped', 'delivered', 'cancelled'];
     if (!validStatuses.includes(status)) {
       return res.status(400).json({
@@ -430,20 +391,17 @@ export const updateOrderStatus = async (req, res, next) => {
         error: [`Status must be one of: ${validStatuses.join(', ')}`]
       });
     }
-    
-    // Find and update the order
+
     const updatedOrder = await OrderModel.findByIdAndUpdate(
       id,
       { status },
-      { new: true } // Return the updated document
+      { new: true }
     );
-    
+
     if (!updatedOrder) {
-      return res.status(404).json({
-        message: "Order not found"
-      });
+      return res.status(404).json({ message: "Order not found" });
     }
-    
+
     return res.status(200).json({
       message: "Order status updated successfully",
       data: updatedOrder

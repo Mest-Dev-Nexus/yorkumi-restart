@@ -1,6 +1,6 @@
-import { UserModel } from "../models/user.js";
-import { CartModel } from "../models/cart.js"; // Import the CartModel
-import { userValidationSchema, userLoginValidationSchema } from "../validators/user.js"
+import { UserModel } from "../models/baseuser.js";
+import { RegularUserModel } from "../models/user.js";
+import { userValidationSchema, userLoginValidationSchema, passwordResetValidationSchema } from "../validators/user.js";
 import bcrypt from "bcrypt";
 import jwt from "jsonwebtoken";
 import { sendEmailSignup } from "../utils/mailingUser.js";
@@ -13,6 +13,7 @@ export const registerUser = async (req, res, next) => {
       ...req.body,
       image,
     }, { abortEarly: false });
+    
     if (error) {
       return res.status(422).json(error);
     }
@@ -30,34 +31,22 @@ export const registerUser = async (req, res, next) => {
     const hashedPassword = bcrypt.hashSync(value.password, 10);
 
     // Create User with role explicitly set
-    const newUser = await UserModel.create({
+    const newUser = await RegularUserModel.create({
       email: value.email,
       password: hashedPassword,
       username: value.username, 
       image: value.image,
-      lastname: value.lastname, 
-      whatsappnumber: value.whatsappnumber, // Make sure this matches your schema
+      fullName: value.fullName,
+      whatsappnumber: value.whatsappnumber,
+      address: value.address,
       role: "user" // Enforce User role
     });
 
-    // Create an empty cart for the new user
-    const newCart = await CartModel.create({
-      products: [],
-      user: newUser._id,
-      totalPrice: 0
-    });
-    
-    // Update the user with the cart reference
-    const updatedUser = await UserModel.findByIdAndUpdate(
-      newUser._id,
-      { cart: newCart._id },
-      { new: true }
-    );
 
     // Send welcome email
     sendEmailSignup(
       newUser.email,
-      "Welcome User to the Yorkumi",
+      "Welcome to Yorkumi",
       newUser.username,
       newUser.role
     );
@@ -79,40 +68,16 @@ export const registerUser = async (req, res, next) => {
   }
 };
 
-
-export const resetPassword = async (req, res) => {
-  try {
-    const { token } = req.params;
-    const { newPassword } = req.body;
-
-    const decoded = jwt.verify(token, process.env.JWT_SECRET);
-    const user = await UserModel.findById(decoded.id);
-    if (!user) {
-      return res.status(404).json({ message: 'User not found' });
-    }
-
-    const hashedPassword = await bcrypt.hash(newPassword, 10);
-    user.password = hashedPassword;
-    await user.save();
-
-    return res.status(200).json({ message: 'Password reset successful' });
-
-  } catch (error) {
-    console.error('Reset password error:', error);
-    return res.status(400).json({ message: 'Invalid or expired token' });
-  }
-};
-
-
 export const loginUser = async (req, res, next) => {
   try {
-    const {error, value} = userLoginValidationSchema.validate(req.body);
+    const { error, value } = userLoginValidationSchema.validate(req.body);
     if (error) {
       return res.status(422).json(error);
     }
     
-    const user = await UserModel.findOne({
-      email: value.email
+    const user = await RegularUserModel.findOne({
+      email: value.email,
+      role: "user"
     });
     
     if (!user) {
@@ -121,26 +86,13 @@ export const loginUser = async (req, res, next) => {
     
     const correctPassword = bcrypt.compareSync(value.password, user.password);
     if (!correctPassword) {
-      return res.status(401).json("invalid credentials!");
-    }
-    
-    // Check if user has a cart, create one if not
-    const existingCart = await CartModel.findOne({ user: user._id });
-    if (!existingCart) {
-      // Create a new cart for the user if they don't have one
-      const newCart = new CartModel({
-        products: [],
-        user: user._id,
-        totalPrice: 0
-      });
-      
-      await newCart.save();
+      return res.status(401).json("Invalid credentials!");
     }
     
     const accessTokenLogin = jwt.sign(
-      {id: user.id, role: user.role},
+      { id: user.id, role: user.role },
       process.env.JWT_SECRET_KEY,
-      {expiresIn: "24h"}
+      { expiresIn: "48h" }
     );
     
     res.status(200).json({
@@ -148,7 +100,8 @@ export const loginUser = async (req, res, next) => {
       User: {
         role: user.role,
         email: user.email,
-        UserId: user.id
+        userId: user.id,
+        fullName: user.fullName
       },
     });
   } catch (error) {
@@ -157,14 +110,61 @@ export const loginUser = async (req, res, next) => {
   }
 };
 
-export const getUsers = async (req, res, next) => {
+export const resetUserPassword = async (req, res) => {
   try {
+    const { token } = req.params;
+    const { error, value } = passwordResetValidationSchema.validate(req.body);
     
+    if (error) {
+      return res.status(422).json(error);
+    }
+
+    const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    const user = await RegularUserModel.findById(decoded.id);
     
-    // Find user by ID and populate the cart field
-    const user = await UserModel.find()
-      .populate('cart')
-      .select('-password'); // Exclude password from the response
+    if (!user || user.role !== "user") {
+      return res.status(404).json({ message: 'User not found' });
+    }
+
+    const hashedPassword = await bcrypt.hash(value.newPassword, 10);
+    user.password = hashedPassword;
+    await user.save();
+
+    return res.status(200).json({ message: 'Password reset successful' });
+  } catch (error) {
+    console.error('Reset password error:', error);
+    return res.status(400).json({ message: 'Invalid or expired token' });
+  }
+};
+
+export const getAllUsers = async (req, res, next) => {
+  try {
+    // Only admins should be able to get all users
+    if (req.auth.role !== "admin") {
+      return res.status(403).json({ message: "Forbidden: Insufficient permissions" });
+    }
+    
+    const users = await RegularUserModel.find()
+      .select('-password');
+    
+    res.status(200).json(users);
+  } catch (error) {
+    console.error("Error fetching users:", error);
+    next(error);
+  }
+};
+
+export const getUserById = async (req, res, next) => {
+  try {
+    const userId = req.params.id;
+    
+    // Check permissions: admins can access any user, users can only access themselves
+    if (req.auth.role !== "admin" && req.auth.id !== userId) {
+      return res.status(403).json({ message: "Forbidden: Insufficient permissions" });
+    }
+    
+    const user = await RegularUserModel.findById(userId)
+      .select('-password');
     
     if (!user) {
       return res.status(404).json({ message: "User not found" });
@@ -177,35 +177,13 @@ export const getUsers = async (req, res, next) => {
   }
 };
 
-export const getUserById = async (req, res, next) => {
-  try {
-    const userId = req.params.id;
-    
-    // Find user by ID and populate the cart field
-    const user = await UserModel.findById(userId)
-      .populate('cart')
-      .select('-password'); // Exclude password from the response
-    
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-    
-    res.status(200).json(user);
-  } catch (error) {
-    console.error("Error fetching user:", error);
-    next(error);
-  }
-};
- 
-export const patchUser = async (req, res, next) => {
+export const updateUser = async (req, res, next) => {
   try {
     const authenticatedUserId = req.auth.id;
-    
-    // Get the User ID from the request parameters
     const requestedUserId = req.params.id;
     
-    // Check if the authenticated User is trying to update their own profile
-    if (authenticatedUserId !== requestedUserId) {
+    // Check if the authenticated user is trying to update their own profile
+    if (authenticatedUserId !== requestedUserId && req.auth.role !== "admin") {
       return res.status(403).json({
         message: "Forbidden: You can only update your own profile"
       });
@@ -215,14 +193,17 @@ export const patchUser = async (req, res, next) => {
         
     // Check if a new image was uploaded
     if (req.file?.path) {
-      updateData.image = req.file?.path;
+      updateData.image = req.file.path;
     }
+    
+    // Prevent role change through this endpoint
+    delete updateData.role;
         
     // Find and update the user
-    const result = await UserModel.findByIdAndUpdate(req.params.id, updateData, {
+    const result = await RegularUserModel.findByIdAndUpdate(requestedUserId, updateData, {
       new: true,
       runValidators: true
-    });
+    }).select('-password');
     
     if (!result) {
       return res.status(404).json({
@@ -235,29 +216,25 @@ export const patchUser = async (req, res, next) => {
       data: result
     });
   } catch (error) {
-    next(error)
+    next(error);
   }
-}
+};
 
 export const deleteUser = async (req, res, next) => {
   try {
     const authenticatedUserId = req.auth.id;
-    
-    // Get the User ID from the request parameters
     const requestedUserId = req.params.id;
     
-    // Check if the authenticated User is trying to delete their own profile
-    if (authenticatedUserId !== requestedUserId) {
+    // Check if the authenticated user is trying to delete their own profile
+    // or is an admin
+    if (authenticatedUserId !== requestedUserId && req.auth.role !== "admin") {
       return res.status(403).json({
         message: "Forbidden: You can only delete your own profile"
       });
     }
     
-    // Find and delete the user's cart first
-    await CartModel.findOneAndDelete({ user: req.params.id });
-    
-    // Then delete the user
-    const result = await UserModel.findByIdAndDelete(req.params.id);
+    // Find and delete the user
+    const result = await RegularUserModel.findByIdAndDelete(requestedUserId);
     
     if (!result) {
       return res.status(404).json({
@@ -269,6 +246,6 @@ export const deleteUser = async (req, res, next) => {
       message: "User deleted successfully"
     });
   } catch (error) {
-    next(error)
+    next(error);
   }
-}
+};

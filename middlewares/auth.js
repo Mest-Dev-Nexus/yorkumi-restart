@@ -1,62 +1,64 @@
-import {expressjwt} from "express-jwt";
-import { UserModel } from "../models/user.js";
-import { VendorModel } from "../models/vendor.js";
+import { expressjwt } from "express-jwt";
+import { UserModel } from "../models/baseuser.js";
 
-
-export const isAuthenticated = expressjwt ({
-  secret : process.env.JWT_SECRET_KEY,
-  algorithms : ["HS256"],
+export const isAuthenticated = expressjwt({
+  secret: process.env.JWT_SECRET_KEY,
+  algorithms: ["HS256"],
 });
 
+/**
+ * Middleware to normalize user ID from JWT payload
+ */
+export const normalizeAuth = (req, res, next) => {
+  if (req.auth && !req.auth.id) {
+    req.auth.id = req.auth.sub || req.auth.userId || req.auth._id;
+  }
+  next();
+};
 
-export const isUserAuthorized = (role) => {
+/**
+ * Authorize any specific role (e.g., ['user'], ['admin'])
+ */
+export const authorizeRole = (roles = []) => {
   return async (req, res, next) => {
     try {
       const user = await UserModel.findById(req.auth.id);
-      
-      // Check if user exists
+      console.log("Fetched user:", user);
       if (!user) {
         return res.status(404).json({ message: "User not found" });
       }
-      
-      // Check if user has role property
-      if (!user.role) {
-        return res.status(403).json({ message: "User role not defined" });
-      }
-      
-      // Check if user has required role
-      if (role?.includes(user.role)) {
+
+      if (roles.includes(user.role)) {
         next();
       } else {
-        res.status(403).json({ message: "You are unauthorized!" });
+        return res.status(403).json({ message: "Access denied: insufficient role" });
       }
-    } catch (error) {
-      console.error("Authorization error:", error);
-      res.status(500).json({ message: "Server error during authorization" });
+    } catch (err) {
+      console.error("Authorization error:", err);
+      return res.status(500).json({ message: "Server error during role authorization" });
     }
   };
 };
-export const isVendorAuthorized = (role) => {
+
+/**
+ * Authorize only admins with optional level check (e.g., 'junior', 'super')
+ */
+export const authorizeAdmin = (requiredLevel = null) => {
   return async (req, res, next) => {
-    const user = await VendorModel.findById(req.auth.id);
-    if (role?.includes (user.role)) {
+    try {
+      const admin = await UserModel.findById(req.auth.id);
+      if (!admin || admin.role !== "admin") {
+        return res.status(403).json({ message: "Admin access required" });
+      }
+
+      if (requiredLevel && admin.adminLevel !== requiredLevel) {
+        return res.status(403).json({ message: `Only ${requiredLevel} admins allowed` });
+      }
+
       next();
-    }else{
-      res.status(403).json("You are unauthorized!")
+    } catch (err) {
+      console.error("Admin authorization error:", err);
+      return res.status(500).json({ message: "Server error during admin authorization" });
     }
-  }
-};
-export const normalizeAuth = (req, res, next) => {
-  // If auth object exists but doesn't have id property
-  if (req.auth && !req.auth.id) {
-    // Check for common alternatives
-    if (req.auth.sub) {
-      req.auth.id = req.auth.sub;
-    } else if (req.auth.userId) {
-      req.auth.id = req.auth.userId;
-    } else if (req.auth._id) {
-      req.auth.id = req.auth._id;
-    }
-  }
-  next();
+  };
 };

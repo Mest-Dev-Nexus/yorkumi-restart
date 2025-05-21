@@ -1,5 +1,5 @@
 import {Router} from 'express';
-import { isAuthenticated } from '../middlewares/auth.js';
+import { authorizeAdmin, authorizeRole, isAuthenticated } from '../middlewares/auth.js';
 import { 
   createOrder, 
   completeOrderAfterPayment,
@@ -12,41 +12,45 @@ import {
 const orderRouter = Router();
 
 /**
- * @route   POST /api/orders
+ * @route   POST /api/order
  * @desc    Create a new order from cart
  * @access  Private
  */
 orderRouter.post('/order', isAuthenticated, createOrder);
 
 /**
- * @route   POST /api/orders/:orderId/payment
+ * @route   POST /api/order/:orderId/payment
  * @desc    Complete order after successful payment
  * @access  Private
  */
-orderRouter.post('/:orderId/payment', isAuthenticated, completeOrderAfterPayment);
-
-orderRouter.get('/order', isAuthenticated, getUserOrders);
-orderRouter.get('/:id', isAuthenticated, getOrderById);
+orderRouter.post('/order/:orderId/payment', isAuthenticated, completeOrderAfterPayment);
 
 /**
- * @route   GET /api/orders
+ * @route   GET /api/order/user
  * @desc    Get all orders for current user
  * @access  Private
  */
-
+orderRouter.get('/order/user', isAuthenticated, getUserOrders);
 
 /**
- * @route   GET /api/orders/admin/all
+ * @route   GET /api/order/all
  * @desc    Get all orders (admin only)
  * @access  Admin
  */
-orderRouter.get('/admin/all', isAuthenticated, getAllOrders);
+orderRouter.get('/order/all', isAuthenticated, authorizeAdmin("super"), getAllOrders);
 
 /**
- * @route   PUT /api/orders/:id/status
+ * @route   PUT /api/order/:id/status
  * @desc    Update order status (admin only)
  * @access  Admin
  */
-orderRouter.put('/:id/status', isAuthenticated, updateOrderStatus);
+orderRouter.put('/order/:id/status', isAuthenticated, authorizeAdmin("super"), updateOrderStatus);
+
+/**
+ * @route   GET /api/order/:id
+ * @desc    Get specific order by ID
+ * @access  Private
+ */
+orderRouter.get('/order/:id', isAuthenticated, getOrderById);
 
 export default orderRouter;

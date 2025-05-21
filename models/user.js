@@ -1,18 +1,9 @@
 import mongoose from "mongoose";
-import normalizeMongoose from 'normalize-mongoose';
+import { UserModel } from './baseuser.js';
 
 const userSchema = new mongoose.Schema({
-  email: { type: String, required: true, unique: true },
-  password: { type: String, required: true },
-  username: { type: String, required: true },
-  image: { type: String },
-  fullName: { type: String }, // Added lastname field
-  whatsappnumber: { type: String }, // Fixed field name to match registration
-  role: { 
-    type: String, 
-    enum: ['user'], 
-    default: 'user' 
-  },
+  
+  whatsappnumber: { type: String },
   address: {
     address1: {
       type: String,
@@ -42,9 +33,9 @@ const userSchema = new mongoose.Schema({
       type: String,
       trim: true
     }
-  },
-}, {timestamps: true})
+  }
+});
 
-userSchema.plugin(normalizeMongoose);
+// Create regular user discriminator
+export const RegularUserModel = UserModel.discriminator('user', userSchema);
 
-export const UserModel = mongoose.model("user", userSchema)

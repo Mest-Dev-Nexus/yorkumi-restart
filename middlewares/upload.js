@@ -19,7 +19,7 @@ export const productsPicturesUpload = multer({
   })
 });
 
-export const vendorPictureUpload = multer({
+export const adminPictureUpload = multer({
   storage: new CloudinaryStorage({
       cloudinary,
       params: {

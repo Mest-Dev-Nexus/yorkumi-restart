@@ -60,7 +60,7 @@ export const addProduct = async (req, res, next) => {
 export const getProducts = async (req, res, next) => {
   try {
     const {filter = '{}',sort = '{}'} = req.query;
-    const result = await ProductModel.find(JSON.parse(filter)).sort(JSON.parse(sort))
+    const result = await ProductModel.find(JSON.parse(filter)).sort(JSON.parse(sort)).populate('category');
     return res.status(200).json(result);
   } catch (error) {
     next(error)

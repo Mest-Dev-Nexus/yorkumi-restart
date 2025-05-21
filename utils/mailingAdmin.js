@@ -27,7 +27,7 @@ export const sendEmailSignup = async (to, subject,username) => {
     <tr>
       <td style="padding: 30px; text-align: left; color: #333333;">
         <p>Hello Vendor,</p>
-        <p>Thank you for joining <strong>Yorkumi</strong> as one of our valued vendors ${username}!</p>
+        <p>Thank you for joining <strong>Yorkumi</strong> as one of our valued Admin ${username}!</p>
         <p>We’re excited to have you on board. With your amazing products and our platform, we’re confident we can create something great together.</p>
         <p>You’ll have access to tools to manage your listings, track orders, and connect with customers who are excited about what you offer.</p>
         <p>If you have any questions or need support, we’re here for you every step of the way.</p>

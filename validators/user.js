@@ -1,72 +1,91 @@
-import Joi from "joi"
+import Joi from 'joi';
+import { baseUserValidationSchema } from './baseuser.js';
 
-export const userValidationSchema = Joi.object({
-  email: Joi.string()
-    .email({ minDomainSegments: 2 })
-    .required()
-    .messages({
-      'string.email': 'Please provide a valid email address',
-      'string.empty': 'Email cannot be empty',
-      'any.required': 'Email is required'
-    }),
-    password: Joi.string()
-    .min(8)
-    .pattern(new RegExp('^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)[a-zA-Z\\d]{8,}$'))
-    .required()
-    .messages({
-      'string.min': 'Password must be at least 8 characters long',
-      'string.pattern.base': 'Password must contain at least one uppercase letter, one lowercase letter, and one number',
-      'string.empty': 'Password cannot be empty',
-      'any.required': 'Password is required'
-    }),
-    username: Joi.string()
+
+
+// Regular user validation schema
+export const userValidationSchema = baseUserValidationSchema.keys({
+  fullName: Joi.string()
     .min(2)
-    .max(50)
-    .required()
+    .max(100)
     .messages({
-      'string.min': 'First name must be at least 2 characters',
-      'string.max': 'First name cannot exceed 50 characters',
-      'string.empty': 'First name cannot be empty',
-      'any.required': 'First name is required'
+      'string.min': 'Full name must be at least 2 characters long',
+      'string.max': 'Full name cannot exceed 100 characters'
     }),
-    image: Joi.string()
+  
+  whatsappnumber: Joi.string()
+    .pattern(/^\+?[1-9]\d{1,14}$/)
     .messages({
-      'string.empty': 'Image URL cannot be empty',
+      'string.pattern.base': 'Please provide a valid phone number (E.164 format recommended)'
     }),
-    role: Joi.string()
-    .valid('user')
-    .default('user')
-    .messages({
-      'any.only': 'Role must be  "user" '
-    }),
-    whatsappNumber: Joi.string()
-    .pattern(new RegExp('^[0-9]{10,15}$'))
-    .required()
-    .messages({
-      'string.pattern.base': 'Phone number must contain 10-15 digits only',
-      'string.empty': 'Phone number cannot be empty',
-      'any.required': 'Phone number is required'
-    }),
+  
+  address: Joi.object({
+    address1: Joi.string()
+      .required()
+      .messages({
+        'any.required': 'Address line 1 is required'
+      }),
+    
+    address2: Joi.string().allow('', null),
+    
+    city: Joi.string()
+      .required()
+      .messages({
+        'any.required': 'City is required'
+      }),
+    
+    country: Joi.string()
+      .required()
+      .messages({
+        'any.required': 'Country is required'
+      }),
+    
+    region: Joi.string()
+      .required()
+      .messages({
+        'any.required': 'Region/State is required'
+      }),
+    
+    postalCode: Joi.string().allow('', null)
+  }).required()
+});
 
-  });
 
-  export const userLoginValidationSchema = Joi.object({
-    email: Joi.string()
-    .email({ minDomainSegments: 2 })
+// Login validation schema (works for all user types)
+export const userLoginValidationSchema = Joi.object({
+  email: Joi.string()
+    .email()
     .required()
     .messages({
       'string.email': 'Please provide a valid email address',
-      'string.empty': 'Email cannot be empty',
       'any.required': 'Email is required'
     }),
-    password: Joi.string()
-    .min(8)
-    .pattern(new RegExp('^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)[a-zA-Z\\d]{8,}$'))
+  
+  password: Joi.string()
     .required()
     .messages({
-      'string.min': 'Password must be at least 8 characters long',
-      'string.pattern.base': 'Password must contain at least one uppercase letter, one lowercase letter, and one number',
-      'string.empty': 'Password cannot be empty',
       'any.required': 'Password is required'
     })
-  });
+});
+
+// Password reset validation schema
+export const passwordResetValidationSchema = Joi.object({
+  newPassword: Joi.string()
+    .min(8)
+    .pattern(new RegExp('^(?=.*[a-z])(?=.*[A-Z])(?=.*\\d)'))
+    .required()
+    .messages({
+      'string.min': 'Password must be at least 8 characters long',
+      'string.pattern.base': 'Password must include at least one uppercase letter, one lowercase letter, and one number',
+      'any.required': 'New password is required'
+    }),
+  
+  confirmPassword: Joi.string()
+    .valid(Joi.ref('newPassword'))
+    .required()
+    .messages({
+      'any.only': 'Passwords must match',
+      'any.required': 'Password confirmation is required'
+    })
+});
+

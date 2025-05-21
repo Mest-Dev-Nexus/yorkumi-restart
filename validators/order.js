@@ -8,7 +8,7 @@ export const orderValidationSchema = Joi.object({
   country: Joi.string().required(),
   phoneNumber: Joi.number().required(),
   status: Joi.string()
-    .valid('pending', 'shipped', 'delivered', 'cancelled')
+    .valid('not paid', 'pending', 'processing', 'shipped', 'delivered', 'cancelled')
     .default('pending'),
   totalPrice: Joi.number().positive().required(),
   shippingFee: Joi.number().optional(),
